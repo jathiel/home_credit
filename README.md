@@ -1,5 +1,5 @@
 ## Project Description
-The Home Credit Group (HCG) is looking to develop a model that accurately predicts the riskiness of a particular loan. Such models are referred to as 'scorecards'. Since scorecards need to be updated according to changes in consumer behavior over time, their predictive ability may change over time as well. The goalof this project is to develop a scorecard that can provide time-stable predictions of credit defaults. The data provided encompass a wide variety of categories, but no credit scores.
+The Home Credit Group (HCG) is looking to develop a model that accurately predicts the riskiness of a particular loan. Such models are referred to as 'scorecards'. Since scorecards need to be updated according to changes in consumer behavior over time, their predictive ability may change over time as well. The goal of this project is to develop a scorecard that can provide time-stable predictions of credit defaults. The data provided encompass a wide variety of categories, but no credit scores.
 
 ## Data Description
 
