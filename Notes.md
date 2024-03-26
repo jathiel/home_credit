@@ -10,7 +10,7 @@ After looking over the starter notebook and reading the discussion pages, we've 
 
 ### Joining the Data
 
-The home-credit-data-cleaning.ipynb contains a lot of helpful information regarding how to put the data together. We should use this as a blueprint when cleaning the data ourselves. Be careful not to discard all NaN entries as they may indicate something of value depending on the feature.
+The home-credit-data-cleaning.ipynb document contains a lot of helpful information regarding how to put the data together. We should use this as a blueprint when cleaning the data ourselves. Be careful not to discard all NaN entries as they may indicate something of value depending on the feature.
 
 ## Model
 
