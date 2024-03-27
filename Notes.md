@@ -5,7 +5,9 @@ After looking over the starter notebook and reading the discussion pages, we've 
   * The main metric here involves stability over the long-term. Being able to make accurate predictions in the short-run seems to be of no interest to the competition host. They want a model that will not experience a severe decline in performance over a long stretch of time.
   * The test data set is very small, but they have a hidden one that is much larger. Due to the number of cases and features available, memory issues will be something with which we must deal. Batches should be used.
 
-
+## Relevant columns:
+  * train_base: case_id, date_decision, WEEK_NUM, target
+  * 
 # Tasks
 
 ### Joining the Data
@@ -23,3 +25,4 @@ The size of the data set means that we must use some kind of batch system when m
 ### Metric
 
 A better understanding of the metric is needed. This may help steer feature and model selection.
+
