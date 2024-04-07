@@ -906,9 +906,9 @@ features_to_files = {'actualdpd_943P': ['train_applprev_1_0.csv', 'train_applpre
  'typesuite_864L': ['train_static_0_0.csv', 'train_static_0_1.csv'],
  'validfrom_1069D': ['train_static_0_0.csv', 'train_static_0_1.csv']}
 
-columns = list(features_to_files.keys())
+COLUMNS = list(features_to_files.keys())
 
-files = ['train_applprev_1_0.csv',
+FILES = ['train_applprev_1_0.csv',
  'train_applprev_1_1.csv',
  'train_applprev_2.csv',
  'train_base.csv',
