@@ -908,10 +908,10 @@ features_to_files = {'actualdpd_943P': ['train_applprev_1_0.csv', 'train_applpre
 
 COLUMNS = list(features_to_files.keys())
 
-FILES = ['train_applprev_1_0.csv',
+FILES = ['train_base.csv',
+ 'train_applprev_1_0.csv',
  'train_applprev_1_1.csv',
  'train_applprev_2.csv',
- 'train_base.csv',
  'train_credit_bureau_a_1_0.csv',
  'train_credit_bureau_a_1_1.csv',
  'train_credit_bureau_a_1_2.csv',
