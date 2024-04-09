@@ -19,8 +19,8 @@ We will also calculate the standard deviation of the residual from the above lin
 
 The final score is a combination of the AUC score and the stability score:
 
-$
-\text{Final Score} = \text{AUC Score} + 88 \cdot \min (0,a) - 0.5 \cdot \text{std(residual)}
-$
+$\text{Final Score} = \text{AUC Score} + 88 \cdot \min (0,a) - 0.5 \cdot \text{std(residual)}$
 
-## References
+## Dataset Link
+
+[Link to dataset on Google Drive](https://drive.google.com/drive/folders/1InFUP3wnR9u3pczlWKUDoqtkLpBMxVqT?usp=sharing)
