@@ -22,80 +22,160 @@
 # WARNINGS
 # ========
 #
-# 1. This script is incomplete, it is lacking a way to 
-#    merge all files into a single master dataframe.
-#    This is a work in progress.
+# 1. This script appears complete and will generate a
+#    single dataframe and a csv file ~2.5GB in size called
+#    master_data_file.csv
 #
 # 2. Polars is critical. It is significantly faster than
 #    pandas and will make a huge different in running time.
 #
 # 3. Make sure to back-up the original data in case I
-#    have introduced any bugs in the reduction() function.
+#    have introduced any bugs.
 #
 #############################################################
 
+
+#############################################################
+# Importing necessary modules
+#############################################################
 import numpy as np
 import pandas as pd
 import polars as pl
-import datetime
+#############################################################
 
+
+#############################################################
+# Importing file names and column names from another file
+#############################################################
 from features_dictionary import *
-f_2_f = features_to_files
+#############################################################
 
+
+#############################################################
+# Path to training data
+#############################################################
 path_train = 'csv_files/train/'
+#############################################################
 
+
+#############################################################
+# Function to replace categorical variables by int
+#############################################################
 def remove_strings(files):
+    print('REMOVING STRINGS')
+    for i,file in enumerate(files): 			    # reading every file
+        df = pd.read_csv('csv_files/train/' + file)         # importing data into a dataframe
     
-    for i,file in enumerate(files):
-        df = pd.read_csv('csv_files/train/' + file)
-    
-        for column in df.columns:
-            if df[column].dtype == 'object':
-                df[column] = pd.factorize(df[column])[0]
-        df.to_csv('csv_files/train/' + file, index = False)
+        for column in df.columns:			    # step through each column in the dataframe
+            if df[column].dtype == 'object':		    # check if the column is 'object' type to be changed
+                df[column] = pd.factorize(df[column])[0]    # introducing dummy categorical variables
+        df.to_csv('csv_files/train/' + file, index = False) # write new dataframe to file
         
-        print(f' {i+1}/{len(files)} ' + file)
-		
+        print(f' {i+1}/{len(files)} ' + file)               # print progress
+    print('=================')
+#############################################################
+
+
+#############################################################
+# Function to convert numbers to categorical variables by 
+# quartile.
+#############################################################
 def float_to_cat(files):
-    
-    for i,file in enumerate(files):
-        df = pd.read_csv('csv_files/train/' + file)
+    print('CONVERTING FLOAT COLUMNS TO CATEGORICAL')
+    for i,file in enumerate(files):		            # reading every file
+        df = pd.read_csv('csv_files/train/' + file)         # importing data into a dataframe
         
-        for column in df.columns:
-            if df[column].dtype == 'float64':
-                _25 = df[column].describe()[4]
-                _50 = df[column].describe()[5]
-                _75 = df[column].describe()[6]
-                A = (df[column] >= _75) * 3
+        for column in df.columns:                           # step through each column in the dataframe
+            if df[column].dtype == 'float64':               # check if the column is 'float64' type to be changed
+                _25 = df[column].describe()[4]              # 1st quartile boundary
+                _50 = df[column].describe()[5]              # 2nd
+                _75 = df[column].describe()[6]              # 3rd
+                A = (df[column] >= _75) * 3                 # assigning variables by quartile
                 B = ((df[column] >= _50) & (df[column] < _75)) * 2
                 C = ((df[column] >= _25) & (df[column] < _50)) * 1
                 D = (df[column] < _25) * 0
-                E = (df[column].isnull()) * -1
+                E = (df[column].isnull()) * -1              # NaN encoded as -1
                 df[column] = (A+B+C+D+E).copy().astype(np.int64)
                 
-        df.to_csv('csv_files/train/' + file, index = False)
-        print(f' {i+1}/{len(files)} ' + file)      
-		
+        df.to_csv('csv_files/train/' + file, index = False) # write new dataframe to file
+        print(f' {i+1}/{len(files)} ' + file)               # print progress
+    print('=================')
+#############################################################
+
+
+#############################################################
+# Function to aggregate columns that have num_group1 or
+# num_group2. The aggregation function simply takes whatever
+# category appears the most.
+#############################################################
 def aggregate(files):
-    for i,file in enumerate(files):
-        df = pd.read_csv(path_train + file, nrows=0).columns.tolist()
+    print('AGGREGATING COLUMNS')
+    for i,file in enumerate(files):                         # reading every file
+        df = pd.read_csv(path_train + file, nrows=0).columns.tolist() # read only the column names
     
-        if 'num_group1' in df:
+        if 'num_group1' in df:                              # read in full file if num_group1 appears
             df = pl.read_csv(path_train + file)
-            data = df.group_by('case_id').agg(pl.col(df.columns[1]).map_elements(lambda x : x.value_counts()[0,1]))
+            data = df.group_by('case_id').agg(pl.col(df.columns[1]).map_elements(lambda x : x.value_counts(sort=True)[0,0])) # create dataframe that will aggregate by most frequent category
 
             for column in df.columns[2:]:
-                df2 = df.group_by('case_id').agg(pl.col(column).map_elements(lambda x : x.value_counts()[0,1]))
-                data = data.join(df2, on = 'case_id')
+                df2 = df.group_by('case_id').agg(pl.col(column).map_elements(lambda x : x.value_counts(sort=True)[0,0])) # aggregate remaining columns by most frequent category
+                data = data.join(df2, on = 'case_id')       # join newly created dataframe to the main one
         
-            data.write_csv(path_train + file)    
+            data.write_csv(path_train + file)               # write new dataframe to file
         
-        print(f'{i+1}/{len(FILES)}')
-	
-def reduction():	
-	remove_strings(FILES[1:])
-	float_to_cat(FILES[1:])
-	aggregate(FILES[1:])
-	df = pd.read_csv(path_train + FILES[0])
-	df['date_decision'] = pd.to_datetime(df['date_decision'], format='%Y-%m-%d')
-	D = [pd.read_csv(path_train + file) for file in FILES[1:]]
+        print(f'{i+1}/{len(files)}')                        # print progress
+    print('=================')
+#############################################################
+
+
+#############################################################
+#
+#############################################################
+ def attach(columns, dataframes, df):
+    print('ATTACHING COLUMNS')
+    for i,column in enumerate(columns):                     # go over every column that is not 'case_id'
+        if column != 'case_id':
+            DF1 = pl.DataFrame()                            # create an empty dataframe with two columns, 'case_id' and the current column
+            DF1.with_columns(pl.lit(None).alias('case_id'))
+            DF1.with_columns(pl.lit(None).alias(column))
+            for d in dataframes:                            # check every dataframe that has the same column name and concatenate the column to DF1
+                if column in d.columns:                     # then aggregate by most frequent category as above
+                    DF1 = pl.concat([DF1, d[['case_id', column]]])
+        DF1.group_by('case_id').agg(pl.col(column).map_elements(lambda x : x.value_counts(sort=True)[0,0]))
+        df = df.join(DF1, on = 'case_id', how = 'left')     # join new column containing the aggregate of the same category spread over all dataframes to the master dataframe
+        print(f'{i+1}/{len(columns)}')                      # print progress
+    print('=================')                          
+    return df                                               # returns master dataframe
+#############################################################
+
+
+#############################################################
+# Main function that modifies all by the train_base.csv file
+#############################################################
+def modify_data(files,columns):
+    remove_strings(files[1:])                               # modifies strings in all but train_base.csv file
+    float_to_cat(files[1:])                                 # float to categorical in all but train_base.csv file
+    aggregate(files[1:])				    # aggregates as mentioned above in all but train_base.csv file
+    df = pl.read_csv(path_train + files[0])                 # read in train_base.csv file
+    D = [pl.read_csv(path_train + file) for file in files]  # read all over files in a list of dataframes
+    df = attach(columns, D, df)                             # begin attaching columns from all other dataframes to the main one from train_base.csv
+    df = df.to_pandas()                                     # convert the dataframe to pandas
+    df['date_decision'] = pd.to_datetime(df['date_decision'], format='%Y-%m-%d') # convert datetime column
+    df.fillna(-1, inplace= True)                            # replace all NaN by -1 that were introduced in the merging process
+    print('DONE!')
+    return df		                                    # return master dataframe
+#############################################################
+
+
+#############################################################
+# Apply all of the above modifications to the dataset
+#############################################################
+df = modify_data(FILES,COLUMNS)
+#############################################################
+
+
+#############################################################
+# Write final table to 'master_data_file.csv'
+#############################################################
+df.to_csv('master_data_file.csv', index=False)
+#############################################################
