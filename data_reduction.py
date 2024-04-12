@@ -3,7 +3,7 @@
 # Data reduction script
 # =====================
 #
-# The following set of functions implement the
+# The set of functions below implement the
 # following assumptions in order to reduce the
 # size of the dataset:
 #
@@ -17,13 +17,17 @@
 #
 # 4. For files containing num_group1 or num_group2,
 #    aggregation is done by taking the most common
-#    value found.
+#    value found. (num_group1 and num_group2 columns
+#    have been dropped)
+#
+# 5. Dates have been made categorical (except for those in
+#    the train_base.csv file. 
 #
 # WARNINGS
 # ========
 #
 # 1. This script appears complete and will generate a
-#    single dataframe and a csv file ~2.5GB in size called
+#    single dataframe and a csv file ~1.8GB in size called
 #    master_data_file.csv
 #
 # 2. Polars is critical. It is significantly faster than
@@ -41,6 +45,7 @@
 import numpy as np
 import pandas as pd
 import polars as pl
+import time
 #############################################################
 
 
@@ -63,12 +68,16 @@ path_train = 'csv_files/train/'
 #############################################################
 def remove_strings(files):
     print('REMOVING STRINGS')
-    for i,file in enumerate(files): 			    # reading every file
+    for i,file in enumerate(files): 			            # reading every file
         df = pd.read_csv('csv_files/train/' + file)         # importing data into a dataframe
     
-        for column in df.columns:			    # step through each column in the dataframe
-            if df[column].dtype == 'object':		    # check if the column is 'object' type to be changed
-                df[column] = pd.factorize(df[column])[0]    # introducing dummy categorical variables
+        for column in df.columns:			                # step through each column in the dataframe
+            if df[column].dtype == 'object' and column[-1] != 'D':   # coversion to categorical for non-date columns
+                df[column] = pd.factorize(df[column])[0].astype(np.int64) 
+            elif df[column].dtype == 'object' and column[-1] == 'D': # coversion to categorical for date columns
+                df[column].fillna('1899-12-31', inplace=True)
+                df[column] = pd.to_datetime(df[column], format='%Y-%m-%d')
+                df[column] = (df[column] - pd.Timestamp('1900-01-01 00:00:00')).apply(lambda x: x.days).copy()
         df.to_csv('csv_files/train/' + file, index = False) # write new dataframe to file
         
         print(f' {i+1}/{len(files)} ' + file)               # print progress
@@ -82,7 +91,7 @@ def remove_strings(files):
 #############################################################
 def float_to_cat(files):
     print('CONVERTING FLOAT COLUMNS TO CATEGORICAL')
-    for i,file in enumerate(files):		            # reading every file
+    for i,file in enumerate(files):		                    # reading every file
         df = pd.read_csv('csv_files/train/' + file)         # importing data into a dataframe
         
         for column in df.columns:                           # step through each column in the dataframe
@@ -118,8 +127,9 @@ def aggregate(files):
             data = df.group_by('case_id').agg(pl.col(df.columns[1]).map_elements(lambda x : x.value_counts(sort=True)[0,0])) # create dataframe that will aggregate by most frequent category
 
             for column in df.columns[2:]:
-                df2 = df.group_by('case_id').agg(pl.col(column).map_elements(lambda x : x.value_counts(sort=True)[0,0])) # aggregate remaining columns by most frequent category
-                data = data.join(df2, on = 'case_id')       # join newly created dataframe to the main one
+                if column not in ['num_group1', 'num_group2']:
+                    df2 = df.group_by('case_id').agg(pl.col(column).map_elements(lambda x : x.value_counts(sort=True)[0,0])) # aggregate remaining columns by most frequent category
+                    data = data.join(df2, on = 'case_id')   # join newly created dataframe to the main one     
         
             data.write_csv(path_train + file)               # write new dataframe to file
         
@@ -129,7 +139,28 @@ def aggregate(files):
 
 
 #############################################################
-#
+# Function that drops num_group1 and num_group2 columns.
+#############################################################
+def drop_num(files):
+    print('DROPPING num_group1 AND num_group2 COLUMNS')
+    for i,file in enumerate(files):                         # reading every file
+        df = pl.read_csv(path_train + file)
+    
+        if 'num_group2' in df.columns:
+            df = df.drop('num_group1')                      # drop num_group1
+        if 'num_group2' in df.columns:
+            df = df.drop('num_group2')                      # drop num_group2
+
+        df.write_csv(path_train + file)    
+
+        print(f'{i+1}/{len(files)} ' + file)                # print progress
+    print('=================')           
+#############################################################
+
+
+#############################################################
+# Function that reads in all files and attaches them ton a
+# single master table.
 #############################################################
  def attach(columns, dataframes, df):
     print('ATTACHING COLUMNS')
@@ -153,17 +184,24 @@ def aggregate(files):
 # Main function that modifies all by the train_base.csv file
 #############################################################
 def modify_data(files,columns):
+    a = time.time()
     remove_strings(files[1:])                               # modifies strings in all but train_base.csv file
     float_to_cat(files[1:])                                 # float to categorical in all but train_base.csv file
-    aggregate(files[1:])				    # aggregates as mentioned above in all but train_base.csv file
+    aggregate(files[1:])				                    # aggregates as mentioned above in all but train_base.csv file
+    drop_num(files[1:])                                     # drops as mentioned above in all but train_base.csv file
+    for column in df.columns:                               # casts float columns as int
+        if df[column].dtype == 'float64':
+            df[column] = df[column].astype('int64').copy()
     df = pl.read_csv(path_train + files[0])                 # read in train_base.csv file
     D = [pl.read_csv(path_train + file) for file in files]  # read all over files in a list of dataframes
     df = attach(columns, D, df)                             # begin attaching columns from all other dataframes to the main one from train_base.csv
     df = df.to_pandas()                                     # convert the dataframe to pandas
     df['date_decision'] = pd.to_datetime(df['date_decision'], format='%Y-%m-%d') # convert datetime column
     df.fillna(-1, inplace= True)                            # replace all NaN by -1 that were introduced in the merging process
+    b = time.time()
     print('DONE!')
-    return df		                                    # return master dataframe
+    print(b-a)
+    return df		                                        # return master dataframe
 #############################################################
 
 
