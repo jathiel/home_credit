@@ -8,11 +8,19 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import pandas as pd
 import time
+from sklearn.metrics import roc_curve, auc, roc_auc_score
 
 
 # Function to get the number of features from the dataloader
 def get_num_features(dataloader):
-    # Iterate over dataloader to get the first batch
+    """Returns the number of features in a dataloader
+
+    Args:
+        dataloader (DataLoader): Load dataloader
+
+    Returns:
+        num_feaatures: number of features
+    """
     for data, _ in dataloader:
         return data.shape[1]  # Return the second dimension (num_features)
 
@@ -30,31 +38,36 @@ class SimpleNN(nn.Module):
         x = torch.sigmoid(self.fc3(x))  # Sigmoid activation for binary classification
         return x
 
-
-# def train_SimpleNN(X_train, y_train, epochs=100):
-#     device = check_device()
-#     # Initialize the model, loss function, and optimizer
-#     model = SimpleNN()
-#     # move model to device
-#     model.to(device)
-#     criterion = nn.BCELoss()  # Binary Cross-Entropy Loss for binary classification
-
-#     optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-#     X_train = torch.tensor(X_train).float().to(device)
-#     y_train = torch.tensor(y_train).float().to(device)
-
-#     # Training loop
-#     for epoch in range(epochs):  # Loop over the dataset multiple times
-#         optimizer.zero_grad()  # Zero the parameter gradients
-#         outputs = model(X_train)  # Forward pass
-#         loss = criterion(outputs, y_train)  # Calculate loss
-#         loss.backward()  # Backward pass
-#         optimizer.step()  # Optimize
-#         print(f"epoch {epoch} of {epochs} epochs")
+class GRUModel(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, output_size):
+        super(GRUModel, self).__init__()
+        self.gru = nn.GRU(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+    
+    def forward(self, x):
+        # Initialize hidden state
+        h0 = torch.zeros(self.gru.num_layers, x.size(0), self.gru.hidden_size).to(x.device)
+        
+        # Forward propagate GRU
+        out, _ = self.gru(x, h0)
+        
+        # Decode the hidden state of the last time step
+        out = self.fc(out[:, -1, :])
+        return out
 
 
 def train_SimpleNN(train_loader, test_loader, epochs=100):
+    """Trains a simple neural network given training and validation dataloaders
+
+    Args:
+        train_loader (DataLoader): DataLoader for training data
+        test_loader (DataLoader): DataLoader for validation data
+        epochs (int, optional): Number of epochs. Defaults to 100.
+
+    Returns:
+        Train Losses: list of train losses
+        Validation Losses: list of validation losses
+    """
     device = check_device()
     train_features = get_num_features(train_loader)
     validation_features = get_num_features(test_loader)
@@ -71,6 +84,10 @@ def train_SimpleNN(train_loader, test_loader, epochs=100):
     training_loss = []
     validation_loss = []
     start_time = time.time()
+    # Initialize variables to track the best model
+    best_val_loss = float('inf')
+    best_epoch = 0
+
     for epoch in range(epochs):
         model.train()  # Set model to training mode
         total_train_loss = 0
@@ -101,65 +118,89 @@ def train_SimpleNN(train_loader, test_loader, epochs=100):
         avg_val_loss = total_val_loss / len(test_loader)
         validation_loss.append(avg_val_loss)
         epoch_duration = time.time() - start_time
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            best_epoch = epoch
+            torch.save(model.state_dict(), 'W:/Erdos/Project/home_credit/data/bestSimpleNN.pth')  # Save the model parameters
+            print(f"Model saved at epoch {epoch+1} with Validation Loss: {avg_val_loss:.4f}")
+        print(f"Best model was saved at epoch {best_epoch+1} with a validation loss of {best_val_loss:.4f}")
+
         print(
             f"Epoch {epoch+1}/{epochs}, Training Loss: {avg_train_loss:.4f}, Validation Loss: {avg_val_loss:.4f} finished in {epoch_duration:.2f} seconds"
         )
 
     return training_loss, validation_loss
+from sklearn.metrics import roc_curve, auc, roc_auc_score
+import matplotlib.pyplot as plt
 
+def evaluate_model(model, loader, plt_title=""):
+    """Evaluate a trained neural network on a test set and compute ROC AUC score.
 
-# def data_split(df, output):
-#     scaler = StandardScaler()
-#     X_scaled = scaler.fit_transform(df)
-#     # X_scaled = df
+    Args:
+        model (torch.nn.Module): The trained neural network model.
+        test_loader (DataLoader): DataLoader for validation or test data.
 
-#     # Splitting the data into training and testing sets
-#     # Using a test size of 20% and a random state for reproducibility
-#     X_train, X_test, y_train, y_test = train_test_split(X_scaled, output, test_size=0.2, random_state=42)
+    Returns:
+        float: The average loss on the test set.
+        list: The list of predicted probabilities.
+        float: The ROC AUC score for the predictions.
+    """
+    device = check_device()
+    model.to(device)
+    model.eval()  # Set the model to evaluation mode
+    criterion = nn.BCELoss()
+    total_loss = 0
+    y_true = []
+    y_scores = []
 
-#     # Displaying the sizes of the splits to verify
-#     print(f"Training data shape: {X_train.shape}")
-#     print(f"Testing data shape: {X_test.shape}")
-#     # Convert data to tensors
-#     train_dataset = TensorDataset(torch.tensor(X_train).float(), torch.tensor(y_train.values).float())
-#     test_dataset = TensorDataset(torch.tensor(X_test).float(), torch.tensor(y_test.values).float())
-#     # Creating data loaders
-#     batch_size = 64
-#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-#     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    with torch.no_grad():
+        for X_batch, y_batch in loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            outputs = model(X_batch)
+            loss = criterion(outputs, y_batch)
+            total_loss += loss.item()
+            y_true.extend(y_batch.cpu().numpy())
+            y_scores.extend(outputs.cpu().numpy())  # Collect raw probabilities
 
-#     # X_train = torch.randn(100, 500)  # 100 samples, 500 features -> directly train the joined table
-#     # y_train = torch.randint(0, 2, (100, 1)).type(torch.FloatTensor)  # Binary labels (0 or 1)
-#     return X_train, y_train#, train_loader, test_loader
-#     # train_model(train_loader, criterion, optimizer)
-# def data_split(df, output):
-#     scaler = StandardScaler()
-#     X_scaled = scaler.fit_transform(df)
+    average_loss = total_loss / len(loader)
+    
+    # Calculate ROC AUC
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+    roc_auc = auc(fpr, tpr)
+    # ROC curve    
+    fig =plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'Receiver Operating Characteristic : {plt_title}')
+    plt.legend(loc="lower right")
+    plt.show()
+    fig.savefig(f"W:/Erdos/Project/home_credit/data{plt_title}.png")
+    
+    # Print out the AUC score
+    print(f"ROC AUC Score: {roc_auc:.4f}")
+    
+    return average_loss, y_scores, roc_auc
 
-#     # Splitting the data into training and testing sets
-#     X_train, X_test, y_train, y_test = train_test_split(X_scaled, output, test_size=0.2, random_state=42)
+# average_loss, test_probabilities, roc_auc_score = evaluate_model(trained_model, test_loader)
 
-#     # Ensure that y_train and y_test are numpy arrays, not DataFrames
-#     y_train_array = y_train.values.to_numpy()  # This flattens the array if y_train is a DataFrame column
-#     y_test_array = y_test.values.to_numpy()    # Similarly for y_test
+def data_split(df_in: pd.DataFrame, output_in: pd.DataFrame, return_dfs:bool=False, seed:int=42):
+    """Split data into training and validation datasets or dataloaders
 
-#     # Convert data to tensors
-#     train_dataset = TensorDataset(torch.tensor(X_train).float(), torch.tensor(y_train_array).float())
-#     test_dataset = TensorDataset(torch.tensor(X_test).float(), torch.tensor(y_test_array).float())
+    Args:
+        df_in (pd.DataFrame): Input Dataframe
+        output_in (pd.DataFrame): Output column from Dataframe
+        return_dfs (bool, optional): return split data arrays with columns instead of dataloaders. Defaults to True.
+        seed (int, optional): random state. Defaults to 42.
 
-#     # Creating data loaders
-#     batch_size = 64
-#     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-#     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-#     return train_loader, test_loader
-
-
-def data_split(df_in, output_in):
+    Returns:
+        _type_: Dataloaders or data arrays with column names.
+    """
     # Identify numeric columns (assuming non-numeric are object types or datetime)
     df = df_in.select_dtypes(include=["number"])
-    # pd.DataFrame.select_dtypes
-    # df = df.values
     # Scale only numeric columns
     scaler = StandardScaler()
     # df_scaled[numeric_cols] = scaler.fit_transform(df[numeric_cols])
@@ -169,27 +210,34 @@ def data_split(df_in, output_in):
 
     # Splitting the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(
-        df_scaled, output, test_size=0.2, random_state=42
+        df_scaled, output, test_size=0.2, random_state=seed
     )
+    if return_dfs:
+        X_train_df =pd.DataFrame(X_train, columns=df.columns)
+        X_test_df =pd.DataFrame(X_test, columns=df.columns)
+        y_train_df =pd.DataFrame(y_train, columns=output_in.columns)
+        y_test_df =pd.DataFrame(y_test, columns=output_in.columns)
+        print("Returning DFs")
+        return X_train_df, X_test_df, y_train_df, y_test_df
+    else:
+        # Ensure that y_train and y_test are numpy arrays
+        y_train_array = y_train
+        y_test_array = y_test
+        # y_test_array = y_test.values.ravel()
+        # Convert data to tensors
+        train_dataset = TensorDataset(
+            torch.tensor(X_train).float(), torch.tensor(y_train_array).float()
+        )
+        test_dataset = TensorDataset(
+            torch.tensor(X_test).float(), torch.tensor(y_test_array).float()
+        )
 
-    # Ensure that y_train and y_test are numpy arrays
-    y_train_array = y_train
-    y_test_array = y_test
-    # y_test_array = y_test.values.ravel()
-    # Convert data to tensors
-    train_dataset = TensorDataset(
-        torch.tensor(X_train).float(), torch.tensor(y_train_array).float()
-    )
-    test_dataset = TensorDataset(
-        torch.tensor(X_test).float(), torch.tensor(y_test_array).float()
-    )
+        # Creating data loaders
+        batch_size = 2000
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    # Creating data loaders
-    batch_size = 64
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    return train_loader, test_loader
+        return train_loader, test_loader
 
 
 def check_device():
