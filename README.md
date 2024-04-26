@@ -19,7 +19,7 @@ We will also calculate the standard deviation of the residuals from the above li
 
 The final score is a combination of the computations mentioned above:
 
-$$\text{Final Score} = \text{mean(gini)} + 88.0 \cdot \min (0,a) - 0.5 \cdot \text{std(residual)}.$$
+$$\text{Stability Score} = \text{mean(gini)} + 88.0 \cdot \min (0,a) - 0.5 \cdot \text{std(residual)}.$$
 
 ## Dataset Link
 
