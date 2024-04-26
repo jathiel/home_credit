@@ -159,7 +159,7 @@ def drop_num(files):
 
 
 #############################################################
-# Function that reads in all files and attaches them ton a
+# Function that reads in all files and attaches them to a
 # single master table.
 #############################################################
  def attach(columns, dataframes, df):
